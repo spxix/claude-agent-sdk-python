@@ -38,7 +38,7 @@ _CMD_LENGTH_LIMIT = 8000 if platform.system() == "Windows" else 100000
 
 
 class SubprocessCLITransport(Transport):
-    """Subprocess transport using Claude Code CLI."""
+    """Subprocess transport using Claude Code CLI or claude-code-router (ccr)."""
 
     def __init__(
         self,
@@ -48,9 +48,14 @@ class SubprocessCLITransport(Transport):
         self._prompt = prompt
         self._is_streaming = not isinstance(prompt, str)
         self._options = options
-        self._cli_path = (
-            str(options.cli_path) if options.cli_path is not None else self._find_cli()
-        )
+        self._use_ccr = options.use_ccr
+        # Determine CLI path based on use_ccr option
+        if options.cli_path is not None:
+            self._cli_path = str(options.cli_path)
+        elif self._use_ccr:
+            self._cli_path = self._find_ccr()
+        else:
+            self._cli_path = self._find_cli()
         self._cwd = str(options.cwd) if options.cwd else None
         self._process: Process | None = None
         self._stdout_stream: TextReceiveStream | None = None
@@ -98,6 +103,39 @@ class SubprocessCLITransport(Transport):
             '  export PATH="$HOME/node_modules/.bin:$PATH"\n'
             "\nOr provide the path via ClaudeAgentOptions:\n"
             "  ClaudeAgentOptions(cli_path='/path/to/claude')"
+        )
+
+    def _find_ccr(self) -> str:
+        """Find claude-code-router (ccr) binary.
+
+        ccr allows routing Claude Code requests to different models.
+        See: https://github.com/musistudio/claude-code-router
+        """
+        # First check system PATH
+        if ccr := shutil.which("ccr"):
+            return ccr
+
+        # Common installation locations
+        locations = [
+            Path.home() / ".npm-global/bin/ccr",
+            Path("/usr/local/bin/ccr"),
+            Path("/opt/homebrew/bin/ccr"),
+            Path.home() / ".local/bin/ccr",
+            Path.home() / "node_modules/.bin/ccr",
+            Path.home() / ".yarn/bin/ccr",
+        ]
+
+        for path in locations:
+            if path.exists() and path.is_file():
+                return str(path)
+
+        raise CLINotFoundError(
+            "claude-code-router (ccr) not found. Install with:\n"
+            "  npm install -g @musistudio/claude-code-router\n"
+            "\nIf already installed locally, try:\n"
+            '  export PATH="$HOME/node_modules/.bin:$PATH"\n'
+            "\nOr provide the path via ClaudeAgentOptions:\n"
+            "  ClaudeAgentOptions(cli_path='/path/to/ccr', use_ccr=True)"
         )
 
     def _find_bundled_cli(self) -> str | None:
@@ -171,7 +209,12 @@ class SubprocessCLITransport(Transport):
 
     def _build_command(self) -> list[str]:
         """Build CLI command with arguments."""
-        cmd = [self._cli_path, "--output-format", "stream-json", "--verbose"]
+        # When using ccr, we need to add 'code' subcommand
+        # ccr code --output-format stream-json ... instead of claude --output-format ...
+        if self._use_ccr:
+            cmd = [self._cli_path, "code", "--output-format", "stream-json", "--verbose"]
+        else:
+            cmd = [self._cli_path, "--output-format", "stream-json", "--verbose"]
 
         if self._options.system_prompt is None:
             cmd.extend(["--system-prompt", ""])
@@ -388,6 +431,10 @@ class SubprocessCLITransport(Transport):
             if self._options.enable_file_checkpointing:
                 process_env["CLAUDE_CODE_ENABLE_SDK_FILE_CHECKPOINTING"] = "true"
 
+            # Set CCR_HOME_DIR for ccr config path when using ccr
+            if self._use_ccr and self._options.ccr_config_dir:
+                process_env["CCR_HOME_DIR"] = str(self._options.ccr_config_dir)
+
             if self._cwd:
                 process_env["PWD"] = self._cwd
 
@@ -438,11 +485,13 @@ class SubprocessCLITransport(Transport):
                 )
                 self._exit_error = error
                 raise error from e
-            error = CLINotFoundError(f"Claude Code not found at: {self._cli_path}")
+            cli_name = "claude-code-router (ccr)" if self._use_ccr else "Claude Code"
+            error = CLINotFoundError(f"{cli_name} not found at: {self._cli_path}")
             self._exit_error = error
             raise error from e
         except Exception as e:
-            error = CLIConnectionError(f"Failed to start Claude Code: {e}")
+            cli_name = "claude-code-router (ccr)" if self._use_ccr else "Claude Code"
+            error = CLIConnectionError(f"Failed to start {cli_name}: {e}")
             self._exit_error = error
             raise error from e
 
@@ -628,7 +677,17 @@ class SubprocessCLITransport(Transport):
             raise self._exit_error
 
     async def _check_claude_version(self) -> None:
-        """Check Claude Code version and warn if below minimum."""
+        """Check Claude Code version and warn if below minimum.
+
+        When using ccr (claude-code-router), version check is skipped as ccr
+        handles its own compatibility with the underlying claude CLI.
+        """
+        # Skip version check when using ccr - ccr has its own version
+        # and internally calls claude CLI with proper configuration
+        if self._use_ccr:
+            logger.debug("Skipping version check when using claude-code-router (ccr)")
+            return
+
         version_process = None
         try:
             with anyio.fail_after(2):  # 2 second timeout
