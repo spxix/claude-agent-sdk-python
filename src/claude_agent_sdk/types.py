@@ -634,6 +634,15 @@ class ClaudeAgentOptions:
     permission_prompt_tool_name: str | None = None
     cwd: str | Path | None = None
     cli_path: str | Path | None = None
+    # Use claude-code-router (ccr) instead of claude CLI directly.
+    # When enabled, the SDK will call 'ccr code' instead of 'claude',
+    # allowing you to use custom models configured in ccr's config.json.
+    # See: https://github.com/musistudio/claude-code-router
+    use_ccr: bool = False
+    # Custom config directory for ccr. When set, ccr will look for config.json
+    # in this directory instead of the default ~/.claude-code-router/.
+    # Only used when use_ccr=True.
+    ccr_config_dir: str | Path | None = None
     settings: str | None = None
     add_dirs: list[str | Path] = field(default_factory=list)
     env: dict[str, str] = field(default_factory=dict)
