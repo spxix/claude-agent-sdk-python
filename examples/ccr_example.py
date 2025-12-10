@@ -1,4 +1,4 @@
-"""Example: Using claude-code-router (ccr) with custom config directory.
+"""Example: Using claude-code-router (ccr) with its default config directory.
 
 This example demonstrates how to use the Claude Agent SDK with ccr,
 allowing you to route requests to custom models (DeepSeek, Gemini, etc.)
@@ -7,7 +7,7 @@ through ccr's configuration.
 Prerequisites:
 1. Install ccr: npm install -g @musistudio/claude-code-router
 2. Install claude CLI: npm install -g @anthropic-ai/claude-code
-3. Configure your ccr config.json (see ../ccr-config/config.json for example)
+3. Configure your ccr config.json (see ../ccr-config/config.json for an example)
 4. Set environment variables for API keys (OPENROUTER_API_KEY, DEEPSEEK_API_KEY, etc.)
 
 Usage:
@@ -21,8 +21,9 @@ from claude_agent_sdk import ClaudeSDKClient, ClaudeAgentOptions
 from claude_agent_sdk.types import AssistantMessage, TextBlock, ResultMessage
 
 
-# Path to custom ccr config directory (relative to this file)
-CCR_CONFIG_DIR = Path(__file__).parent.parent.parent / "ccr-config"
+# ccr always looks in ~/.claude-code-router by default
+CCR_HOME_DIR = Path.home() / ".claude-code-router"
+SAMPLE_CONFIG = Path(__file__).parent.parent.parent / "ccr-config" / "config.json"
 
 
 async def basic_query_example():
@@ -31,7 +32,6 @@ async def basic_query_example():
 
     options = ClaudeAgentOptions(
         use_ccr=True,  # Enable ccr mode
-        ccr_config_dir=CCR_CONFIG_DIR,  # Use project-local config
     )
 
     async with ClaudeSDKClient(options=options) as client:
@@ -54,7 +54,6 @@ async def conversation_example():
 
     options = ClaudeAgentOptions(
         use_ccr=True,
-        ccr_config_dir=CCR_CONFIG_DIR,
     )
 
     async with ClaudeSDKClient(options=options) as client:
@@ -81,7 +80,6 @@ async def with_tools_example():
 
     options = ClaudeAgentOptions(
         use_ccr=True,
-        ccr_config_dir=CCR_CONFIG_DIR,
         allowed_tools=["Bash", "Read"],  # Allow specific tools
         permission_mode="acceptEdits",  # Auto-accept tool usage
     )
@@ -98,13 +96,16 @@ async def with_tools_example():
 
 async def main():
     """Run all examples."""
-    print(f"Using ccr config from: {CCR_CONFIG_DIR}\n")
+    print(f"Using ccr config from: {CCR_HOME_DIR}\n")
 
-    # Check if config exists
-    config_file = CCR_CONFIG_DIR / "config.json"
+    # Check if config exists in the default location
+    config_file = CCR_HOME_DIR / "config.json"
     if not config_file.exists():
         print(f"Warning: Config file not found at {config_file}")
-        print("Please create the config file first.")
+        if SAMPLE_CONFIG.exists():
+            print(f"Copy the sample: cp {SAMPLE_CONFIG} {config_file}")
+        else:
+            print("Please create the config file first.")
         return
 
     try:

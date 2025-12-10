@@ -431,10 +431,6 @@ class SubprocessCLITransport(Transport):
             if self._options.enable_file_checkpointing:
                 process_env["CLAUDE_CODE_ENABLE_SDK_FILE_CHECKPOINTING"] = "true"
 
-            # Set CCR_HOME_DIR for ccr config path when using ccr
-            if self._use_ccr and self._options.ccr_config_dir:
-                process_env["CCR_HOME_DIR"] = str(self._options.ccr_config_dir)
-
             if self._cwd:
                 process_env["PWD"] = self._cwd
 
