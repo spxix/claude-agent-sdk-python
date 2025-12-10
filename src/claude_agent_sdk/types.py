@@ -639,10 +639,6 @@ class ClaudeAgentOptions:
     # allowing you to use custom models configured in ccr's config.json.
     # See: https://github.com/musistudio/claude-code-router
     use_ccr: bool = False
-    # Custom config directory for ccr. When set, ccr will look for config.json
-    # in this directory instead of the default ~/.claude-code-router/.
-    # Only used when use_ccr=True.
-    ccr_config_dir: str | Path | None = None
     settings: str | None = None
     add_dirs: list[str | Path] = field(default_factory=list)
     env: dict[str, str] = field(default_factory=dict)
