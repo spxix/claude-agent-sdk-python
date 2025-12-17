@@ -132,6 +132,19 @@ class ClaudeSDKClient:
                 options=options,
             )
         await self._transport.connect()
+    
+        # FIXME (Dong Xu):
+        # Wait for ccr/CLI to be ready before sending control requests
+        # This is necessary because ccr (as a wrapper launcher) needs time to:
+        # 1. Parse command line arguments
+        # 2. Read configuration
+        # 3. Start the claude subprocess
+        # 4. Set up stdin/stdout forwarding
+        # Without this delay, the initialize request may be absorbed by the ccr launcher
+        # instead of being forwarded to claude, causing the first request to be silently dropped and ignored.
+        if hasattr(self._transport, "_use_ccr") and self._transport._use_ccr:
+            import anyio
+            await anyio.sleep(1)  # 1s delay for ccr startup
 
         # Extract SDK MCP servers from options
         sdk_mcp_servers = {}
